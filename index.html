@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Online</title>
+    
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #chatContainer {
+            width: 90%;
+            max-width: 600px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        #chatMessages {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: #e0e0e0;
+            overflow-y: auto;
+            border-bottom: 1px solid #ccc;
+        }
+        .message {
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #ddd;
+            max-width: 80%;
+        }
+        .message.incoming {
+            align-self: flex-start;
+            background-color: #b2d8d8;
+        }
+        .message.outgoing {
+            align-self: flex-end;
+            background-color: #d1b2d8;
+        }
+        #inputContainer {
+            display: flex;
+            border-top: 1px solid #ccc;
+        }
+        #inputContainer input {
+            flex-grow: 1;
+            padding: 10px;
+            border: none;
+            outline: none;
+        }
+        #inputContainer button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #inputContainer button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="chatContainer">
+        <h3 id="peerId">Loading peer id..</h1>
+        <button onclick="connect()">Connect</button>
+        <div id="chatMessages"></div>
+        <div id="inputContainer">
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button onclick="onSendMsg()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        function uuid() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
+                return v.toString(16);
+            });
+        }
+
+        function getLocalPeerId()
+        {
+            let local = localStorage.getItem('localPeerId');
+            if(local == undefined || local == '') localStorage.setItem('localPeerId', uuid());
+
+            return localStorage.getItem('localPeerId');
+        }
+
+        function getOthersPeers()
+        {
+            let aux = localStorage.getItem('othersPeers');
+            if(aux == undefined || aux == '') return [];
+            return JSON.parse(aux);
+        }
+
+        function addOthersPeers(peers)
+        {
+            let othersPeers = getOthersPeers();
+            peers.forEach(p => { if(!othersPeers.includes(p)) othersPeers.push(p); });
+            localStorage.setItem('othersPeers', JSON.parse(othersPeers));
+        }
+
+
+
+        const peer = new Peer(getLocalPeerId());
+        var connections = [];
+
+        function appendMessage(text, type = 'incoming') 
+        {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', type);
+            messageDiv.textContent = text;
+            document.getElementById('chatMessages').appendChild(messageDiv);
+            document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+        }
+
+        function onSendMsg() {
+            const messageInput = document.getElementById('messageInput');
+            const messageText = messageInput.value.trim();
+
+            if (messageText) {
+                appendMessage(messageText, 'outgoing');
+                messageInput.value = ''; // Clear the input field
+                if(conn!=null) conn.send(messageText);
+            }
+        }
+
+        
+        
+        function onReceive(data)
+        {
+            console.log(data);
+        }
+        
+
+
+        peer.on('open', function(id) 
+        { 
+            document.getElementById('peerId').textContent = id;
+        });
+        
+        peer.on('connection', function(_conn) 
+        { 
+            connections.push(_conn);
+            _conn.on('data', function(data) 
+            { 
+                onReceive(data);
+            });
+        });
+
+        function connect()
+        {
+            let peerId = prompt("Peer Id");
+            if(peerId != '' && peerId != undefined)
+            {
+                let conn = peer.connect(peerId);
+                conn.on('open', function() {
+                    connections.push(conn);
+                    onReceive("Connection opened!");
+                    conn.on('data', function(data) { onReceive(data); });
+                });
+            }
+        }
+    
+
+
+
+    </script>
+</body>
+</html>

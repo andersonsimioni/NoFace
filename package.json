@@ -1,0 +1,18 @@
+{
+  "name": "noface",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "crystals-kyber-js": "^2.3.0",
+    "mlkem": "^2.3.0",
+    "node-localstorage": "^3.0.5",
+    "peerjs": "^1.5.4"
+  }
+}
