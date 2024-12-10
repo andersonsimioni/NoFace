@@ -1,5 +1,6 @@
 const peerjs = require("peerjs");
 const crypto = require("crypto");
+const cryptoJS = require('crypto-js');
 const crystalsKyberJs = require("crystals-kyber-js");
 //const localStorage = new LocalStorage("localStorage");
 
@@ -9,38 +10,23 @@ class AES256
     {
         this.rawKey = key;
         this.key = undefined;
+        this.key_b64 = Buffer.from(key).toString("base64");
+
+        this.iv  = cryptoJS.enc.Base64.parse("                ");
     }
 
-    init = async () => 
+    encrypt = async (plainText) => 
     {
-        this.key = await crypto.subtle.importKey(
-            "raw",
-            this.rawKey,
-            { name: "AES-CBC", length: 256 }, 
-            false, 
-            ["encrypt", "decrypt"]
-        );
-    }
-
-    encrypt = async (plainText) => {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(plainText);
-
-        const encrypted = await crypto.subtle.encrypt(
-            { name: "AES-CBC", iv: new Uint8Array(16) }, this.key, data
-        );
+        const cipherText = cryptoJS.AES.encrypt(plainText, this.key_b64, {iv:this.iv}).toString();
         
-        return Buffer.from(encrypted).toString("base64");
+        return cipherText;
     }
     
-    decrypt = async (encryptedData) => {
-        let decoded = Buffer.from(encryptedData, "base64");
-        const decrypted = await crypto.subtle.decrypt(
-            { name: "AES-CBC", iv: new Uint8Array(16) }, this.key, decoded
-        );
+    decrypt = async (encryptedData) => 
+    {
+        const text = cryptoJS.AES.decrypt(encryptedData, this.key_b64, {iv:this.iv});
     
-        const decoder = new TextDecoder();
-        return decoder.decode(decrypted);
+        return text.toString(cryptoJS.enc.Utf8);
     }
 }
 
@@ -85,7 +71,6 @@ class CryptoUser
         let sender = new crystalsKyberJs.MlKem1024();
         let [aes256KeyCiphered, aes256Key] = await sender.encap(pkR);
         let aes = new AES256(aes256Key);
-        await aes.init();
         let cipherText = await aes.encrypt(data);
         
         let cipherData = 
@@ -105,7 +90,6 @@ class CryptoUser
 
         let aes256Key = await this.localUser.decap(aes256KeyCiphered, this.sk);
         let aes = new AES256(aes256Key);
-        await aes.init();
         let data = await aes.decrypt(cipherText);
 
         return data;
@@ -138,16 +122,17 @@ class P2pUser
     constructor(name)
     {
         let _this = this;
-        this.seed = 666;
-        this.maxOffset = 100;
+        this.seed = 777;
+        this.maxOffset = 1000;
         this.maxConnections = 20;
         this.name = name;
+        this.availablePeers = [];
         this.connections = [];
         this.peer = this.generateLocalPeer();
         this.peer.on('connection', _conn => { _this.createConnectionRotine(_conn); });
         
-        this.peerNetworkRotine();
-        this.unknownPeerDiscoveryRotine();
+        this.createPeerNetworkRotine();
+        this.createListPeersRotine();
 
         this.protocols = 
         {
@@ -167,54 +152,33 @@ class P2pUser
     {
         let _this = this;
         this.connections.push(conn);
-        this.flushPeerList(conn);
         
         conn.on('data', data => { _this.onReceiveData(data); });
         conn.on('close', ()=>{ _this.connections.slice(_this.connections.indexOf(conn, 1)); });
     }
 
-    flushPeerList = (conn) => 
+    createListPeersRotine = ()=>
     {
-        let myPeerList = JSON.stringify(this.getPeersList());
-
-        this.addOthersPeers(conn.peer);
-
-        setTimeout(()=>{ conn.send(`/peerDiscovery${myPeerList}`); }, 1000);
-
-        for (let i = 0; i < this.connections.length; i++) 
-        {
-            let newPeer = JSON.stringify([conn.peer]);
-            this.connections[i].send(`/peerDiscovery${newPeer}`);
-        }
-    }
-
-    unknownPeerDiscoveryRotine = ()=>
-    {
-        let offset = 1;
         let _this = this;
         setInterval(() => 
         {
-            let rdPeer = _this.uuid(offset);
-            if(_this.connections.filter(conn => conn.peer==rdPeer).length==0  && _this.peer.id!=rdPeer)
-            {
-                let conn = _this.peer.connect(rdPeer);
-                if(conn == undefined) return;
-                conn.on('open', () => { _this.createConnectionRotine(conn); });
-            }
-
-            offset = (offset+1)%_this.maxOffset;
+            _this.peer.listAllPeers(d =>{
+                let newList = d;
+                if(newList.indexOf(_this.peer.id) >= 0) newList.slice(newList.indexOf(_this.peer.id), 1);
+                this.availablePeers = newList; 
+            });
         }, 5000);
     }
 
-    peerNetworkRotine = ()=>
+    createPeerNetworkRotine = ()=>
     {
         let _this = this;
         let connectionsCount = this.maxConnections;
         setInterval(() => 
         {
-            if(_this.connections.length < connectionsCount)
+            if(_this.connections.length < connectionsCount && _this.availablePeers.length > 0)
             {
-                let peerList = _this.getPeersList();
+                let peerList =  _this.availablePeers; //_this.getPeersList();
                 peerList = Array.from(peerList).filter(x => _this.connections.filter(conn => conn.peer==x).length==0 && _this.peer.id!=x);
                 if(peerList.length == 0) return;
                 let rdPeer = peerList[parseInt(Math.random()*peerList.length)];
@@ -241,7 +205,11 @@ class P2pUser
         let keyName = `${this.name}_localPeerId`;
 
         localStorage.setItem(keyName, newPeerId);
-        this.peer = new peerjs.Peer(newPeerId);
+        this.peer = new peerjs.Peer(newPeerId, {
+            host: "34.95.189.87",
+            port: 9000,
+            path: "/noface",
+        });
 
         return this.peer;
     }
@@ -276,6 +244,11 @@ class P2pUser
     {
         let peers = JSON.parse(data);
         this.addOthersPeers(peers);
+    }
+
+    sendMessage = (message) => 
+    {
+        this.sendData(`/message${message}`);
     }
 
     sendData = (data) => 
@@ -329,8 +302,7 @@ class NoFaceUser
 
             for (let i = 0; i < this.onMessageCallbacks.length; i++)
             {
-                let encodedContact = Buffer.from(obj.contact).toString("base64");
-                this.onMessageCallbacks[i](encodedContact, obj.data);
+                await this.onMessageCallbacks[i](obj.fromContact, obj.data);
             }
         }
         catch{}
@@ -339,16 +311,18 @@ class NoFaceUser
     sendMessage = async (contact, data) =>
     {
         let contactDecoded = Uint8Array.from(Buffer.from(contact, "base64"));
-        let selfContact = Buffer.from(this.cryptoUser.pk).toString("base64");
-        let obj = { selfContact, data };
-        let cipherObj = await this.cryptoUser.encrypt(contactDecoded, obj);
+        let fromContact = Buffer.from(this.cryptoUser.pk).toString("base64");
+        let obj = { fromContact, data };
+        let json = JSON.stringify(obj);
+        let cipherObj = await this.cryptoUser.encrypt(contactDecoded, json);
 
-        this.p2pUser.sendData(cipherObj);
+        this.p2pUser.sendMessage(cipherObj);
     }
 }
 
 window.peerjs = peerjs;
 window.crypto = crypto;
+window.cryptoJS = cryptoJS;
 window.crystalsKyberJs = crystalsKyberJs;
 window.NoFaceUser = NoFaceUser;
 

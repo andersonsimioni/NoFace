@@ -173,7 +173,7 @@
                 </div>
                 <div class="modal-body p-0 m-0">
                     <canvas id="qrCodeCanvas" class="m-0"></canvas>
-                    <button class="button m-1" onclick="copyPk()">Copiar Pk</button>
+                    <button id="btnCopyPk" class="button m-1">Copiar Pk</button>
                 </div>
             </div>
         </div>
@@ -189,7 +189,7 @@
                 </div>
                 <div class="modal-body">
                     <button onclick="promptForNewContact()">Type Contact</button>
-                    <button onclick="scanQRCode()">Scan QR Code</button>
+                    <button id="btnScanQrCode">Scan QR Code</button>
                 </div>
             </div>
         </div>
@@ -233,12 +233,14 @@
         let chatData = JSON.parse(localStorage.getItem('chatData')) || {};
         let hasUnreadMessages = false;
 
+        function unsecuredCopyToClipboard(text) { const textArea = document.createElement("textarea"); textArea.value=text; document.body.appendChild(textArea); textArea.focus();textArea.select(); try{document.execCommand('copy')}catch(err){console.error('Unable to copy to clipboard',err)}document.body.removeChild(textArea)};
+
+
         function copyPk() 
         {
             var copyText = noFaceUser.cryptoUser.getPkBase64();
-            navigator.clipboard.writeText(copyText)
-            .then(() => { alert('Contato copiado com sucesso!'); })
-            .catch(err => { console.error('Falha ao copiar contato: ', err); });
+            //unsecuredCopyToClipboard(copyText);
+            navigator.clipboard.writeText(copyText).then(() => { alert('Contato copiado com sucesso!'); }).catch(err => { console.error('Falha ao copiar contato: ', err); });
         }
 
         function initializeContacts() {
@@ -246,9 +248,7 @@
             keys.forEach(contact => {
                 createContact(contact, false);
             });
-        }
-
-        
+        }        
 
         function sendMessage() {
             var input = document.getElementById('message-input');
@@ -346,7 +346,7 @@
             }
         }
 
-        window.onload = function() { initializeContacts(); };
+        
 
         function promptForNewContact() {
             $('#addContactModal').modal('hide');
@@ -378,6 +378,10 @@
                 console.error("Problem starting QR code scanner", err);
             });
         }
+
+        window.onload = function() { initializeContacts(); };
+        document.getElementById('btnCopyPk').addEventListener('click', ()=>{copyPk()});
+        document.getElementById('btnScanQRCode').addEventListener('click', ()=>{scanQRCode()});
     </script>
 </body>
 </html>
