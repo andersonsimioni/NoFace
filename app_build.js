@@ -29267,7 +29267,7 @@ class P2pUser
 
         localStorage.setItem(keyName, newPeerId);
         this.peer = new peerjs.Peer(newPeerId, {
-            host: "34.95.189.87",
+            host: "flypix.app",
             port: 9000,
             path: "/noface",
         });
